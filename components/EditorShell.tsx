@@ -1,6 +1,8 @@
 'use client'
 
 import { useRef, useState, useEffect, useCallback } from 'react'
+import jsPDF from 'jspdf'
+import html2canvas from 'html2canvas'
 import Link from 'next/link'
 import { UserButton } from '@clerk/nextjs'
 import { TEMPLATES } from '@/lib/templates'
@@ -31,6 +33,9 @@ export default function EditorShell({ id }: Props) {
   const [driveFileId, setDriveFileId] = useState<string | null>(null)
   const [modal,       setModal]       = useState<ModalState | null>(null)
   const [phCount,     setPhCount]     = useState(0)
+  const [fileName,    setFileName]    = useState('')
+  const [editingName, setEditingName] = useState(false)
+  const [paperSize,   setPaperSize]   = useState<'a4' | 'letter' | 'legal' | 'a3' | 'a5'>('a4')
 
   const template = TEMPLATES[id] ?? TEMPLATES['new']
 
@@ -44,6 +49,7 @@ export default function EditorShell({ id }: Props) {
 
     const fid = loadFileId(id)
     if (fid) setDriveFileId(fid)
+    setFileName(template.title)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
@@ -127,32 +133,65 @@ export default function EditorShell({ id }: Props) {
     if (editorRef.current) editorRef.current.style.fontSize = size + 'px'
   }
 
-  // ── Save to Google Drive ──────────────────────────────
+  // ── Build PDF from editor content ────────────────────
+  const buildPdf = async () => {
+    const canvas = await html2canvas(editorRef.current!, { scale: 1.5 })
+    const imgData = canvas.toDataURL('image/jpeg', 0.85)
+    const pdf = new jsPDF('p', 'mm', paperSize)
+    const pageW = pdf.internal.pageSize.getWidth()
+    const pageH = pdf.internal.pageSize.getHeight()
+    const imgH = (canvas.height * pageW) / canvas.width
+    let remaining = imgH
+    let offset = 0
+    pdf.addImage(imgData, 'JPEG', 0, offset, pageW, imgH)
+    remaining -= pageH
+    while (remaining > 0) {
+      offset -= pageH
+      pdf.addPage()
+      pdf.addImage(imgData, 'JPEG', 0, offset, pageW, imgH)
+      remaining -= pageH
+    }
+    return pdf
+  }
+
+  // ── Save to Google Drive as PDF ───────────────────────
   const handleSaveToDrive = async () => {
     if (!editorRef.current || isSaving) return
     setIsSaving(true)
-    setSaveStatus('Google Drive में सहेज रहे हैं...')
+    setSaveStatus('Generating PDF...')
 
-    const content = editorRef.current.innerText
-    const result  = await saveToDrive({
-      content,
-      fileName: `${template.title}.txt`,
-      fileId: driveFileId ?? undefined,
-    })
+    const pdf = await buildPdf()
+    const pdfBlob = pdf.output('blob')
+    const name = `${fileName || template.title}.pdf`
+
+    setSaveStatus('Saving to Google Drive...')
+    const result = await saveToDrive(pdfBlob, name, driveFileId)
 
     setIsSaving(false)
     if ('error' in result) {
-      setSaveStatus(
-        result.error === 'no_google_oauth'
-          ? '⚠️ Google Drive के लिए Google account से sign in करें'
-          : `❌ Error: ${result.error}`
-      )
+      if (result.error === 'no_google_oauth') {
+        window.location.href = `/api/drive/auth?returnTo=/editor/${id}`
+        return
+      }
+      setSaveStatus(`❌ Error: ${result.error}`)
     } else {
       setDriveFileId(result.fileId)
       saveFileId(id, result.fileId)
-      setSaveStatus('✓ Google Drive में सहेज लिया गया!')
+      setSaveStatus('✓ Saved to Google Drive!')
     }
     setTimeout(() => setSaveStatus(''), 5000)
+  }
+
+  // ── Download PDF ──────────────────────────────────────
+  const handleDownload = async () => {
+    if (!editorRef.current || isSaving) return
+    setIsSaving(true)
+    setSaveStatus('Generating PDF...')
+    const pdf = await buildPdf()
+    pdf.save(`${fileName || template.title}.pdf`)
+    setIsSaving(false)
+    setSaveStatus('✓ Downloaded!')
+    setTimeout(() => setSaveStatus(''), 3000)
   }
 
   // ── Print ─────────────────────────────────────────────
@@ -190,6 +229,47 @@ export default function EditorShell({ id }: Props) {
       {/* ── Action bar (top) ── */}
       <div className="no-print bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 py-2 flex items-center gap-2 flex-wrap">
+          {/* Paper size selector */}
+          <select
+            value={paperSize}
+            onChange={(e) => setPaperSize(e.target.value as typeof paperSize)}
+            className="text-sm text-gray-700 border border-gray-200 rounded-lg px-2 py-1.5 bg-gray-50 outline-none focus:border-indigo-400 cursor-pointer"
+            title="Paper size"
+          >
+            <option value="a4">A4</option>
+            <option value="letter">Letter</option>
+            <option value="legal">Legal</option>
+            <option value="a3">A3</option>
+            <option value="a5">A5</option>
+          </select>
+
+          {/* Editable file name */}
+          <div className="flex items-center gap-1 border border-gray-200 rounded-lg px-2 py-1 bg-gray-50 min-w-0">
+            {editingName ? (
+              <input
+                autoFocus
+                type="text"
+                value={fileName}
+                onChange={(e) => setFileName(e.target.value)}
+                onBlur={() => setEditingName(false)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') setEditingName(false) }}
+                className="text-sm text-gray-700 bg-transparent outline-none w-40 sm:w-56"
+              />
+            ) : (
+              <span className="text-sm text-gray-700 truncate max-w-[10rem] sm:max-w-[14rem]">
+                {fileName || template.title}
+              </span>
+            )}
+            <span className="text-xs text-gray-400 shrink-0">.pdf</span>
+            <button
+              onClick={() => setEditingName(true)}
+              title="Edit file name"
+              className="ml-1 text-gray-400 hover:text-indigo-600 transition-colors text-xs shrink-0"
+            >
+              ✏️
+            </button>
+          </div>
+
           <button
             onClick={handleSaveToDrive}
             disabled={isSaving}
@@ -197,6 +277,15 @@ export default function EditorShell({ id }: Props) {
           >
             <span>☁️</span>
             <span className="hidden sm:inline">Google Drive</span>
+          </button>
+
+          <button
+            onClick={handleDownload}
+            disabled={isSaving}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white text-sm font-medium transition-colors"
+          >
+            <span>⬇️</span>
+            <span className="hidden sm:inline">Download</span>
           </button>
 
           <button
