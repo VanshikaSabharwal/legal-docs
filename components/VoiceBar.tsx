@@ -10,77 +10,97 @@ type Lang = 'hi-IN' | 'en-IN'
 
 export default function VoiceBar({ onTranscript }: Props) {
   const [isRecording, setIsRecording] = useState(false)
-  const [lang, setLang] = useState<Lang>('hi-IN')
-  const [interim, setInterim]  = useState('')
-  const [status, setStatus]    = useState('माइक दबाएं और बोलें — टेक्स्ट कर्सर पर डलेगा')
-  const recognitionRef = useRef<SpeechRecognition | null>(null)
+  const [lang, setLang]               = useState<Lang>('hi-IN')
+  const [interim, setInterim]         = useState('')
+  const [status, setStatus]           = useState('माइक दबाएं और बोलें — टेक्स्ट कर्सर पर डलेगा')
 
-  const buildRecognition = useCallback((language: Lang): SpeechRecognition | null => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
-    if (!SR) return null
-    const r = new SR()
-    r.lang = language
-    r.continuous = true
-    r.interimResults = true
-    return r
-  }, [])
+  const recognitionRef  = useRef<SpeechRecognition | null>(null)
+  const isRecordingRef  = useRef(false)
+  const langRef         = useRef<Lang>('hi-IN')
+  // Track the last inserted final text to prevent double-fire
+  const lastFinalRef    = useRef('')
 
-  const stopRecognition = () => {
+  isRecordingRef.current = isRecording
+  langRef.current        = lang
+
+  const stopRecognition = useCallback(() => {
     if (recognitionRef.current) {
-      try { recognitionRef.current.stop() } catch {}
+      try { recognitionRef.current.onend = null } catch {}
+      try { recognitionRef.current.stop() }       catch {}
       recognitionRef.current = null
     }
-  }
+  }, [])
 
-  const startVoice = (language: Lang) => {
+  const startVoice = useCallback((language: Lang) => {
     stopRecognition()
-    const r = buildRecognition(language)
-    if (!r) {
+    lastFinalRef.current = ''
+
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SR) {
       alert('Speech Recognition इस ब्राउज़र में उपलब्ध नहीं।\nकृपया Chrome या Edge उपयोग करें।')
       return
     }
 
+    const r = new SR()
+    r.lang           = language
+    r.continuous     = true
+    r.interimResults = true
+    r.maxAlternatives = 1
+
     r.onresult = (event: SpeechRecognitionEvent) => {
-      let finalText = ''
+      let finalText   = ''
       let interimText = ''
+
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const t = event.results[i][0].transcript
-        if (event.results[i].isFinal) finalText += t
-        else interimText += t
+        const transcript = event.results[i][0].transcript
+        if (event.results[i].isFinal) {
+          finalText += transcript
+        } else {
+          interimText += transcript
+        }
       }
+
       setInterim(interimText)
-      if (finalText) {
-        onTranscript(finalText)
+
+      if (finalText.trim()) {
+        // Deduplicate: skip if same text was just inserted
+        if (finalText.trim() !== lastFinalRef.current.trim()) {
+          lastFinalRef.current = finalText.trim()
+          onTranscript(finalText)
+        }
         setInterim('')
       }
     }
 
     r.onerror = (e: SpeechRecognitionErrorEvent) => {
-      if (e.error !== 'aborted') {
-        setStatus('त्रुटि: ' + e.error)
-        setIsRecording(false)
-      }
+      if (e.error === 'aborted' || e.error === 'no-speech') return
+      setStatus('त्रुटि: ' + e.error)
+      setIsRecording(false)
+      isRecordingRef.current = false
     }
 
     r.onend = () => {
-      // Auto-restart for continuous dictation
-      if (recognitionRef.current === r && isRecordingRef.current) {
-        try { r.start() } catch {}
+      // Only restart if still recording — always use a fresh instance
+      if (isRecordingRef.current) {
+        setTimeout(() => {
+          if (isRecordingRef.current) startVoice(langRef.current)
+        }, 150)
       }
     }
 
     recognitionRef.current = r
-    r.start()
-    setIsRecording(true)
-    setStatus('सुन रहा है... बोलें')
-  }
-
-  // We need a ref for isRecording inside onend closure
-  const isRecordingRef = useRef(false)
-  isRecordingRef.current = isRecording
+    try {
+      r.start()
+      setIsRecording(true)
+      setStatus('सुन रहा है... बोलें')
+    } catch {
+      setStatus('माइक शुरू नहीं हो सका। दोबारा कोशिश करें।')
+    }
+  }, [stopRecognition, onTranscript])
 
   const toggleVoice = () => {
     if (isRecording) {
+      isRecordingRef.current = false
       stopRecognition()
       setIsRecording(false)
       setInterim('')
@@ -104,9 +124,7 @@ export default function VoiceBar({ onTranscript }: Props) {
         title={isRecording ? 'बंद करें' : 'बोलकर टाइप करें'}
         className={`
           w-10 h-10 rounded-full flex items-center justify-center text-white text-lg flex-shrink-0 transition-all
-          ${isRecording
-            ? 'bg-red-600 mic-recording'
-            : 'bg-indigo-800 hover:bg-indigo-700'}
+          ${isRecording ? 'bg-red-600 mic-recording' : 'bg-indigo-800 hover:bg-indigo-700'}
         `}
       >
         {isRecording ? '⏹' : '🎤'}
@@ -118,9 +136,7 @@ export default function VoiceBar({ onTranscript }: Props) {
           {status}
         </p>
         {interim && (
-          <p className="text-xs text-indigo-600 italic truncate mt-0.5">
-            {interim}
-          </p>
+          <p className="text-xs text-indigo-600 italic truncate mt-0.5">{interim}</p>
         )}
       </div>
 
