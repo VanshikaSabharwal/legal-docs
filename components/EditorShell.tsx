@@ -228,7 +228,7 @@ export default function EditorShell({ id }: Props) {
 
       {/* ── Action bar (top) ── */}
       <div className="no-print bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-5xl mx-auto px-4 py-2 flex items-center gap-2 flex-wrap">
+        <div className="max-w-5xl mx-auto px-4 py-2 flex items-center gap-2 flex-nowrap overflow-x-auto scrollbar-none">
           {/* Paper size selector */}
           <select
             value={paperSize}

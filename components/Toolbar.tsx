@@ -11,7 +11,7 @@ export default function Toolbar({ fontSize, onFontSizeChange }: Props) {
   }
 
   return (
-    <div className="flex items-center gap-1.5 flex-wrap px-3 py-2 bg-white border-b border-gray-200">
+    <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto px-3 py-2 bg-white border-b border-gray-200 scrollbar-none">
       {/* Text style */}
       <button
         onMouseDown={(e) => { e.preventDefault(); exec('bold') }}

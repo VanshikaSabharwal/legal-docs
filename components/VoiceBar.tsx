@@ -1,152 +1,128 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef } from 'react'
 
 interface Props {
   onTranscript: (text: string) => void
 }
 
-type Lang = 'hi-IN' | 'en-IN'
+type Lang = 'hi' | 'en-IN'
+
+const CHUNK_MS = 3000 // record for 3s, then send complete blob
 
 export default function VoiceBar({ onTranscript }: Props) {
   const [isRecording, setIsRecording] = useState(false)
-  const [lang, setLang]               = useState<Lang>('hi-IN')
-  const [interim, setInterim]         = useState('')
+  const [lang, setLang]               = useState<Lang>('hi')
   const [status, setStatus]           = useState('माइक दबाएं और बोलें — टेक्स्ट कर्सर पर डलेगा')
 
-  const recognitionRef  = useRef<SpeechRecognition | null>(null)
-  const isRecordingRef  = useRef(false)
-  const langRef         = useRef<Lang>('hi-IN')
-  // Track the last inserted final text to prevent double-fire
-  const lastFinalRef    = useRef('')
+  const streamRef      = useRef<MediaStream | null>(null)
+  const recorderRef    = useRef<MediaRecorder | null>(null)
+  const isRecordingRef = useRef(false)
+  const langRef        = useRef<Lang>('hi')
+  const mimeTypeRef    = useRef('audio/webm')
+  langRef.current      = lang
 
-  isRecordingRef.current = isRecording
-  langRef.current        = lang
-
-  const stopRecognition = useCallback(() => {
-    if (recognitionRef.current) {
-      try { recognitionRef.current.onend = null } catch {}
-      try { recognitionRef.current.stop() }       catch {}
-      recognitionRef.current = null
-    }
-  }, [])
-
-  const startVoice = useCallback((language: Lang) => {
-    stopRecognition()
-    lastFinalRef.current = ''
-
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
-    if (!SR) {
-      alert('Speech Recognition इस ब्राउज़र में उपलब्ध नहीं।\nकृपया Chrome या Edge उपयोग करें।')
-      return
-    }
-
-    const r = new SR()
-    r.lang           = language
-    r.continuous     = true
-    r.interimResults = true
-    r.maxAlternatives = 1
-
-    r.onresult = (event: SpeechRecognitionEvent) => {
-      let finalText   = ''
-      let interimText = ''
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript
-        if (event.results[i].isFinal) {
-          finalText += transcript
-        } else {
-          interimText += transcript
-        }
-      }
-
-      setInterim(interimText)
-
-      if (finalText.trim()) {
-        // Deduplicate: skip if same text was just inserted
-        if (finalText.trim() !== lastFinalRef.current.trim()) {
-          lastFinalRef.current = finalText.trim()
-          onTranscript(finalText)
-        }
-        setInterim('')
-      }
-    }
-
-    r.onerror = (e: SpeechRecognitionErrorEvent) => {
-      if (e.error === 'aborted' || e.error === 'no-speech') return
-      setStatus('त्रुटि: ' + e.error)
-      setIsRecording(false)
-      isRecordingRef.current = false
-    }
-
-    r.onend = () => {
-      // Only restart if still recording — always use a fresh instance
-      if (isRecordingRef.current) {
-        setTimeout(() => {
-          if (isRecordingRef.current) startVoice(langRef.current)
-        }, 150)
-      }
-    }
-
-    recognitionRef.current = r
+  const sendBlob = async (blob: Blob) => {
+    if (!blob.size) return
     try {
-      r.start()
-      setIsRecording(true)
-      setStatus('सुन रहा है... बोलें')
-    } catch {
-      setStatus('माइक शुरू नहीं हो सका। दोबारा कोशिश करें।')
-    }
-  }, [stopRecognition, onTranscript])
-
-  const toggleVoice = () => {
-    if (isRecording) {
-      isRecordingRef.current = false
-      stopRecognition()
-      setIsRecording(false)
-      setInterim('')
-      setStatus('माइक दबाएं और बोलें — टेक्स्ट कर्सर पर डलेगा')
-    } else {
-      startVoice(lang)
+      const form = new FormData()
+      form.append('audio', blob, 'audio.' + (mimeTypeRef.current.includes('mp4') ? 'mp4' : 'webm'))
+      form.append('lang', langRef.current)
+      form.append('mimeType', mimeTypeRef.current)
+      const res = await fetch('/api/voice/transcribe', { method: 'POST', body: form })
+      const { transcript } = await res.json()
+      if (transcript?.trim()) onTranscript(transcript.trim() + ' ')
+    } catch (e) {
+      console.error('Transcribe error:', e)
     }
   }
 
+  // Start a fresh MediaRecorder, record for CHUNK_MS, stop → onstop sends complete blob
+  const startChunk = (stream: MediaStream) => {
+    if (!isRecordingRef.current) return
+
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus'
+      : MediaRecorder.isTypeSupported('audio/webm')
+      ? 'audio/webm'
+      : 'audio/mp4'
+    mimeTypeRef.current = mimeType
+
+    const recorder = new MediaRecorder(stream, { mimeType })
+    const chunks: Blob[] = []
+
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data) }
+
+    recorder.onstop = () => {
+      if (chunks.length) {
+        const blob = new Blob(chunks, { type: mimeType })
+        sendBlob(blob)
+      }
+      // Chain next chunk if still recording
+      startChunk(stream)
+    }
+
+    recorder.start()
+    recorderRef.current = recorder
+    setTimeout(() => {
+      if (recorder.state === 'recording') recorder.stop()
+    }, CHUNK_MS)
+  }
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      streamRef.current = stream
+      isRecordingRef.current = true
+      setIsRecording(true)
+      setStatus('सुन रहा है... बोलें')
+      startChunk(stream)
+    } catch {
+      setStatus('माइक access नहीं मिला — browser permissions जांचें')
+    }
+  }
+
+  const stopRecording = () => {
+    isRecordingRef.current = false
+    try { recorderRef.current?.stop() } catch {}
+    recorderRef.current = null
+    streamRef.current?.getTracks().forEach((t) => t.stop())
+    streamRef.current = null
+    setIsRecording(false)
+    setStatus('माइक दबाएं और बोलें — टेक्स्ट कर्सर पर डलेगा')
+  }
+
   const toggleLang = () => {
-    const newLang: Lang = lang === 'hi-IN' ? 'en-IN' : 'hi-IN'
-    setLang(newLang)
-    if (isRecording) startVoice(newLang)
+    const next: Lang = lang === 'hi' ? 'en-IN' : 'hi'
+    setLang(next)
   }
 
   return (
     <div className="flex items-center gap-3 px-3 py-2 bg-gray-50 border-b border-gray-200">
-      {/* Mic button */}
       <button
-        onClick={toggleVoice}
+        onClick={() => isRecording ? stopRecording() : startRecording()}
         title={isRecording ? 'बंद करें' : 'बोलकर टाइप करें'}
-        className={`
-          w-10 h-10 rounded-full flex items-center justify-center text-white text-lg flex-shrink-0 transition-all
-          ${isRecording ? 'bg-red-600 mic-recording' : 'bg-indigo-800 hover:bg-indigo-700'}
-        `}
+        className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-lg flex-shrink-0 transition-all
+          ${isRecording ? 'bg-red-600 mic-recording' : 'bg-indigo-800 hover:bg-indigo-700'}`}
       >
         {isRecording ? '⏹' : '🎤'}
       </button>
 
-      {/* Status + interim text */}
       <div className="flex-1 min-w-0">
         <p className={`text-xs font-medium ${isRecording ? 'text-red-600' : 'text-gray-500'}`}>
           {status}
         </p>
-        {interim && (
-          <p className="text-xs text-indigo-600 italic truncate mt-0.5">{interim}</p>
+        {isRecording && (
+          <p className="text-xs text-indigo-500 mt-0.5">हर 3 सेकंड में टेक्स्ट आएगा...</p>
         )}
       </div>
 
-      {/* Language toggle */}
       <button
         onClick={toggleLang}
         className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors flex-shrink-0"
         title="भाषा बदलें"
       >
-        🌐 {lang === 'hi-IN' ? 'हिंदी' : 'English'}
+        🌐 {lang === 'hi' ? 'हिंदी' : 'English'}
       </button>
     </div>
   )

@@ -46,6 +46,15 @@ body {
   background: #fef08a;
 }
 
+/* ── Hide scrollbar but keep scrollable ── */
+.scrollbar-none {
+  scrollbar-width: none;       /* Firefox */
+  -ms-overflow-style: none;    /* IE/Edge */
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;               /* Chrome/Safari */
+}
+
 /* ── Mic recording pulse ── */
 @keyframes mic-pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
