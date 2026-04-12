@@ -5,6 +5,19 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: { bodySizeLimit: '25mb' },
   },
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'Permissions-Policy',
+            value: 'microphone=*',
+          },
+        ],
+      },
+    ]
+  },
   // Disable webpack persistent cache to avoid filling disk
   webpack: (config, { dev }) => {
     if (dev) {
