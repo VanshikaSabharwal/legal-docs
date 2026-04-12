@@ -39,6 +39,11 @@ export default function VoiceBar({ onTranscript }: Props) {
   const startRecording = async (language: Lang) => {
     stopRecording()
 
+    if (!DG_KEY) {
+      setStatus('⚠️ Deepgram API key missing — Vercel env vars जांचें')
+      return
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       streamRef.current  = stream
@@ -46,7 +51,7 @@ export default function VoiceBar({ onTranscript }: Props) {
 
       const ws = new WebSocket(
         `wss://api.deepgram.com/v1/listen?language=${language}&model=nova-2&punctuate=true&interim_results=true&endpointing=400`,
-        ['token', DG_KEY!]
+        ['token', DG_KEY]
       )
       wsRef.current = ws
 
@@ -98,8 +103,13 @@ export default function VoiceBar({ onTranscript }: Props) {
           }, 500)
         }
       }
-    } catch {
-      setStatus('माइक access नहीं मिला — browser permissions जांचें')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (msg.includes('Permission') || msg.includes('NotAllowed') || msg.includes('denied')) {
+        setStatus('माइक access नहीं मिला — browser permissions जांचें')
+      } else {
+        setStatus(`⚠️ Error: ${msg}`)
+      }
       isRecordingRef.current = false
     }
   }
