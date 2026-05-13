@@ -19,7 +19,7 @@ export default async function DashboardPage() {
       <header className="bg-gradient-to-r from-indigo-900 to-indigo-700 text-white shadow-lg no-print">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold">⚖️ कानूनी दस्तावेज़ सहायक</h1>
+            <h1 className="text-xl font-bold">कानूनी दस्तावेज़ सहायक</h1>
             <p className="text-indigo-200 text-xs mt-0.5">Legal Document Assistant</p>
           </div>
           <div className="flex items-center gap-3">
@@ -64,11 +64,11 @@ export default async function DashboardPage() {
 
         {/* Info box */}
         <div className="mt-10 rounded-xl bg-indigo-50 border border-indigo-100 p-5 text-sm text-indigo-700">
-          <p className="font-semibold mb-1">💡 कैसे काम करता है?</p>
+          <p className="font-semibold mb-1">कैसे काम करता है?</p>
           <ul className="list-disc list-inside space-y-1 text-indigo-600">
             <li>टेम्प्लेट चुनें → दस्तावेज़ खुलेगा</li>
             <li>पीले <strong>{"{{placeholders}}"}</strong> पर क्लिक करें → भरें</li>
-            <li>🎤 माइक बटन दबाएं → बोलकर टाइप करें (हिंदी)</li>
+            <li>माइक बटन दबाएं → बोलकर टाइप करें (हिंदी)</li>
             <li>Google Drive में सहेजें या Print / PDF करें</li>
           </ul>
         </div>

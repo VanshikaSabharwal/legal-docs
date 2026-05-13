@@ -40,7 +40,7 @@ export default function VoiceBar({ onTranscript }: Props) {
     stopRecording()
 
     if (!DG_KEY) {
-      setStatus('⚠️ Deepgram API key missing — Vercel env vars जांचें')
+      setStatus('Deepgram API key missing — Vercel env vars जांचें')
       return
     }
 
@@ -49,9 +49,9 @@ export default function VoiceBar({ onTranscript }: Props) {
       streamRef.current  = stream
       isRecordingRef.current = true
 
+      const key = DG_KEY!.trim().replace(/^[^=]+=/, '') // strip accidental "KEY=" prefix
       const ws = new WebSocket(
-        `wss://api.deepgram.com/v1/listen?language=${language}&model=nova-2&punctuate=true&interim_results=true&endpointing=400`,
-        ['token', DG_KEY]
+        `wss://api.deepgram.com/v1/listen?token=${key}&language=${language}&model=nova-2&punctuate=true&interim_results=true&endpointing=400`
       )
       wsRef.current = ws
 
@@ -108,7 +108,7 @@ export default function VoiceBar({ onTranscript }: Props) {
       if (msg.includes('Permission') || msg.includes('NotAllowed') || msg.includes('denied')) {
         setStatus('माइक access नहीं मिला — browser permissions जांचें')
       } else {
-        setStatus(`⚠️ Error: ${msg}`)
+        setStatus(`Error: ${msg}`)
       }
       isRecordingRef.current = false
     }

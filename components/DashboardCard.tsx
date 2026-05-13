@@ -6,7 +6,7 @@ interface Props {
   id: string
   title: string
   subtitle: string
-  icon: string
+  icon: React.ReactNode;
   isNew?: boolean
 }
 

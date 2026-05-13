@@ -12,6 +12,11 @@ import { saveToDrive } from '@/lib/driveClient'
 import Toolbar from './Toolbar'
 import VoiceBar from './VoiceBar'
 import PlaceholderModal from './PlaceholderModal'
+import { BiSolidPencil } from "react-icons/bi";
+import { FaCloud } from "react-icons/fa6";
+import { IoMdDownload } from "react-icons/io";
+import { IoPrint } from "react-icons/io5";
+import { LuRepeat } from "react-icons/lu";
 
 interface Props {
   id: string
@@ -173,7 +178,7 @@ export default function EditorShell({ id }: Props) {
         window.location.href = `/api/drive/auth?returnTo=/editor/${id}`
         return
       }
-      setSaveStatus(`❌ Error: ${result.error}`)
+      setSaveStatus(`Error: ${result.error}`)
     } else {
       setDriveFileId(result.fileId)
       saveFileId(id, result.fileId)
@@ -266,7 +271,7 @@ export default function EditorShell({ id }: Props) {
               title="Edit file name"
               className="ml-1 text-gray-400 hover:text-indigo-600 transition-colors text-xs shrink-0"
             >
-              ✏️
+              <BiSolidPencil />
             </button>
           </div>
 
@@ -275,7 +280,7 @@ export default function EditorShell({ id }: Props) {
             disabled={isSaving}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-700 hover:bg-green-600 disabled:opacity-60 text-white text-sm font-medium transition-colors"
           >
-            <span>☁️</span>
+            <span><FaCloud /></span>
             <span className="hidden sm:inline">Google Drive</span>
           </button>
 
@@ -284,7 +289,7 @@ export default function EditorShell({ id }: Props) {
             disabled={isSaving}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white text-sm font-medium transition-colors"
           >
-            <span>⬇️</span>
+            <span><IoMdDownload /></span>
             <span className="hidden sm:inline">Download</span>
           </button>
 
@@ -292,7 +297,7 @@ export default function EditorShell({ id }: Props) {
             onClick={handlePrint}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-800 hover:bg-indigo-700 text-white text-sm font-medium transition-colors"
           >
-            <span>🖨️</span>
+            <span><IoPrint /></span>
             <span className="hidden sm:inline">Print / PDF</span>
           </button>
 
@@ -300,7 +305,8 @@ export default function EditorShell({ id }: Props) {
             onClick={handleClear}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-red-50 hover:text-red-700 text-gray-600 border border-gray-200 hover:border-red-200 text-sm font-medium transition-colors"
           >
-            🔄 रीसेट
+            <span><LuRepeat /></span>
+            <span className="hidden sm:inline">रीसेट</span>
           </button>
 
           {saveStatus && (
