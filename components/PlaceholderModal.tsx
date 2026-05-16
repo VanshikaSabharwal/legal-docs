@@ -11,6 +11,7 @@ interface Props {
 export default function PlaceholderModal({ label, onConfirm, onCancel }: Props) {
   const [value, setValue] = useState('')
   const [isListening, setIsListening] = useState(false)
+  const [micError, setMicError] = useState('')
   const inputRef  = useRef<HTMLInputElement>(null)
   const recognitionRef = useRef<SpeechRecognition | null>(null)
 
@@ -32,9 +33,14 @@ export default function PlaceholderModal({ label, onConfirm, onCancel }: Props) 
       setIsListening(false)
       return
     }
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
-    if (!SR) return
 
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SR) {
+      setMicError('आपके ब्राउज़र में voice recognition उपलब्ध नहीं है')
+      return
+    }
+
+    setMicError('')
     const r = new SR()
     r.lang = 'hi-IN'
     r.continuous = false
@@ -42,6 +48,10 @@ export default function PlaceholderModal({ label, onConfirm, onCancel }: Props) 
     r.onresult = (e: SpeechRecognitionEvent) => {
       const text = e.results[0][0].transcript
       setValue(text)
+    }
+    r.onerror = () => {
+      setMicError('पहचान में समस्या — फिर से कोशिश करें')
+      setIsListening(false)
     }
     r.onend = () => setIsListening(false)
     r.start()
@@ -65,6 +75,10 @@ export default function PlaceholderModal({ label, onConfirm, onCancel }: Props) 
           placeholder="यहाँ टाइप करें..."
           className="w-full border-2 border-indigo-200 rounded-lg px-4 py-2.5 text-base text-gray-800 outline-none focus:border-indigo-500 transition-colors"
         />
+
+        {micError && (
+          <p className="text-xs text-red-600 mt-1 text-center">{micError}</p>
+        )}
 
         <button
           onClick={toggleMic}

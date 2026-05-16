@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     const buffer   = Buffer.from(await audio.arrayBuffer())
 
     const dgRes = await fetch(
-      `https://api.deepgram.com/v1/listen?language=hi&model=nova-2&punctuate=true`,
+      `https://api.deepgram.com/v1/listen?language=${lang}&model=nova-2&punctuate=true`,
       {
         method: 'POST',
         headers: {
